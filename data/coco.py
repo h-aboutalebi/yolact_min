@@ -83,12 +83,13 @@ class COCODetection(data.Dataset):
         if self.augmentation is not None:
             if len(box_list) > 0:
                 box_array = np.array(box_list)
-                img, masks, boxes, labels = self.augmentation(img, masks, box_array[:, :4],
+                #changed
+                _, masks, boxes, labels = self.augmentation(img, masks, box_array[:, :4],
                                                               {'num_crowds': num_crowds, 'labels': box_array[:, 4]})
 
                 # I stored num_crowds in labels so I didn't have to modify the entirety of augmentations.
                 num_crowds = labels['num_crowds']
                 labels = labels['labels']
                 boxes = np.hstack((boxes, np.expand_dims(labels, axis=1)))
-
-        return torch.from_numpy(img).permute(2, 0, 1), boxes, masks, height, width, num_crowds
+        #changed
+        return img, boxes, masks, height, width, num_crowds

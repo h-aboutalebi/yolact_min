@@ -1,23 +1,17 @@
-import json
-import numpy as np
 import torch
-import pycocotools
+import onnx
 import argparse
-from pycocotools.coco import COCO
-from pycocotools.cocoeval import COCOeval
-from terminaltables import AsciiTable
-from collections import OrderedDict
 import torch.backends.cudnn as cudnn
 
 from data.coco import COCODetection
 from modules.build_yolact import Yolact
 from utils.augmentations import BaseTransform
 from utils.functions import MovingAverage, ProgressBar
-from utils.box_utils import bbox_iou, mask_iou
 from utils import timer
-from utils.json_api import APDataObject, Make_json, prep_metrics
-from utils.output_utils import after_nms, NMS
-from data.config import cfg, update_config, COCO_LABEL_MAP
+from utils.json_api import APDataObject, Make_json, prep_metrics, calc_map
+from utils.onnx_util import ONNX_util
+from utils.output_utils import  NMS
+from data.config import cfg, update_config
 
 parser = argparse.ArgumentParser(description='YOLACT COCO Evaluation')
 parser.add_argument('--trained_model', default='yolact_base_54_800000.pth', type=str)
@@ -46,13 +40,14 @@ def evaluate(net, dataset, max_num=-1, during_training=False, cocoapi=False, tra
 
         with timer.env('Data loading'):
             img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
-
-            batch = img.unsqueeze(0)
-            if cuda:
-                batch = batch.cuda()
+            #changed
+            # batch = img.unsqueeze(0)
+            # if cuda:
+            #     batch = batch.cuda()
 
         with timer.env('Network forward'):
-            net_outs = net(batch)
+            #changed
+            net_outs = net(img)
             nms_outs = NMS(net_outs, traditional_nms)
             prep_metrics(ap_data, nms_outs, gt, gt_masks, h, w, num_crowd, dataset.ids[image_idx], make_json, cocoapi)
 
@@ -67,28 +62,12 @@ def evaluate(net, dataset, max_num=-1, during_training=False, cocoapi=False, tra
         progress_bar.set_val(i + 1)
         print('\rProcessing:  %s  %d / %d (%.2f%%)  %.2f fps  ' % (
             repr(progress_bar), i + 1, dataset_size, progress, fps), end='')
-
     else:
-        if cocoapi:
-            make_json.dump()
-            print(f'\nJson files dumped, saved in: \'results/\', start evaluting.')
+        table, box_row, mask_row = calc_map(ap_data)
+        print(table)
+        return table, box_row, mask_row
 
-            gt_annotations = COCO(cfg.dataset.valid_info)
-            bbox_dets = gt_annotations.loadRes(f'results/bbox_detections.json')
-            mask_dets = gt_annotations.loadRes(f'results/mask_detections.json')
 
-            print('\nEvaluating BBoxes:')
-            bbox_eval = COCOeval(gt_annotations, bbox_dets, 'bbox')
-            bbox_eval.evaluate()
-            bbox_eval.accumulate()
-            bbox_eval.summarize()
-
-            print('\nEvaluating Masks:')
-            bbox_eval = COCOeval(gt_annotations, mask_dets, 'segm')
-            bbox_eval.evaluate()
-            bbox_eval.accumulate()
-            bbox_eval.summarize()
-            return
 iou_thresholds = [x / 100 for x in range(50, 100, 5)]
 cuda = torch.cuda.is_available()
 
@@ -111,8 +90,11 @@ if __name__ == '__main__':
         dataset = COCODetection(cfg.dataset.valid_images, cfg.dataset.valid_info, augmentation=BaseTransform())
 
         net = Yolact()
+        # net=onnx.load("yolact.onnx")
+        # net= torch.jit.script(net)
         net.load_weights('weights/' + args.trained_model, cuda)
         net.eval()
+        # ONNX_util.save_yolact(net,dataset, "yolact.onnx")
         print('\nModel loaded.\n')
 
         if cuda:

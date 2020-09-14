@@ -112,14 +112,18 @@ def match(pos_thresh, neg_thresh, box_gt, priors, class_gt, crowd_boxes):
 
     return offsets, conf, each_prior_box, each_prior_index
 
-
+# @torch.jit.script
 def make_anchors(conv_h, conv_w, scale):
     prior_data = []
+    cartesian=[]
+    for j in range(int(conv_h)):
+        for i in range(int(conv_w)):
+            cartesian.append((j,i))
     # Iteration order is important (it has to sync up with the convout)
-    for j, i in product(range(conv_h), range(conv_w)):
+    for j, i in cartesian:
         # + 0.5 because priors are in center
-        x = (i + 0.5) / conv_w
-        y = (j + 0.5) / conv_h
+        x = (i + 0.5) / int(conv_w)
+        y = (j + 0.5) / int(conv_h)
 
         for ar in cfg.aspect_ratios:
             ar = sqrt(ar)
