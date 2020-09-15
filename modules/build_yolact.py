@@ -5,6 +5,9 @@ from data.config import cfg, mask_proto_net, extra_head_net
 from modules.backbone import construct_backbone
 from utils.box_utils import make_anchors
 from utils import timer
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms import Normalize, Resize, ToTensor
 import numpy as np
 import cv2
 
@@ -240,7 +243,6 @@ class Yolact(nn.Module):
 
     def forward(self, x):
         # changed
-        x=self.preprocess(x)
         outs = self.backbone(x)
 
         #changed
@@ -290,11 +292,13 @@ class Yolact(nn.Module):
             return predictions
 
     #changed
-    def preprocess(self,image,image_size=550):
+    def preprocess(self,image,img_path,image_size=550):
         MEANS = (103.94, 116.78, 123.68)
         STD=(57.38, 57.12, 58.40)
         channel_map=[2,1,0]
         image=image.astype(np.float32)
+        composed = transforms.Compose([Resize(size=(image_size,image_size)),
+                                       ToTensor()])
         image = cv2.resize(image, (image_size, image_size))
         im_h, im_w, depth = image.shape
 

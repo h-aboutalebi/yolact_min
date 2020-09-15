@@ -10,5 +10,6 @@ class ONNX_util:
         dummy_input= list(range(len(dataset)))[0]
         img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(dummy_input)
         batch = img.unsqueeze(0)
+        batch = batch.cuda()
 
-        torch.onnx.export(model, batch.cuda(), file_name, verbose,opset_version=11)
+        torch.onnx.export(model, (batch), file_name, verbose,opset_version=11)

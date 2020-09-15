@@ -19,6 +19,7 @@ parser.add_argument('--visual_top_k', default=5, type=int, help='Further restric
 parser.add_argument('--traditional_nms', default=False, action='store_true', help='Whether to use traditional nms.')
 parser.add_argument('--max_num', default=-1, type=int, help='The maximum number of images for test, set to -1 for all.')
 parser.add_argument('--cocoapi', action='store_true', help='Whether to use cocoapi to evaluate results.')
+parser.add_argument('--onnx', action='store_false', help='Whether to do onnx model generation')
 
 
 
@@ -35,19 +36,19 @@ def evaluate(net, dataset, max_num=-1, during_training=False, cocoapi=False, tra
                'mask': [[APDataObject() for _ in cfg.dataset.class_names] for _ in iou_thresholds]}
     make_json = Make_json()
 
-    for i, image_idx in enumerate(dataset_indices[:100]):
+    for i, image_idx in enumerate(dataset_indices):
         timer.reset()
 
         with timer.env('Data loading'):
             img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
-            #changed
-            # batch = img.unsqueeze(0)
-            # if cuda:
-            #     batch = batch.cuda()
+
+            batch = img.unsqueeze(0)
+            if cuda:
+                batch = batch.cuda()
 
         with timer.env('Network forward'):
             #changed
-            net_outs = net(img)
+            net_outs = net(batch)
             nms_outs = NMS(net_outs, traditional_nms)
             prep_metrics(ap_data, nms_outs, gt, gt_masks, h, w, num_crowd, dataset.ids[image_idx], make_json, cocoapi)
 
@@ -94,7 +95,8 @@ if __name__ == '__main__':
         # net= torch.jit.script(net)
         net.load_weights('weights/' + args.trained_model, cuda)
         net.eval()
-        # ONNX_util.save_yolact(net,dataset, "yolact.onnx")
+        if(args.onnx):
+            ONNX_util.save_yolact(net,dataset, "yolact.onnx")
         print('\nModel loaded.\n')
 
         if cuda:
