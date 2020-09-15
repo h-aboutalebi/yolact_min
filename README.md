@@ -1,12 +1,3 @@
-## Yolact_minimal
-Minimal PyTorch implementation of [Yolact:《YOLACT: Real-time Instance Segmentation》](https://arxiv.org/abs/1904.02689).  
-The original project is [here](https://github.com/dbolya/yolact).  
-
-This implementation simplified the original code, preserved the main function and made the network easy to understand.   
-
-Following instruction is based on resnet-101.  
-### The network structure.  
-![Example 0](data/network.png)
 
 ## Environments  
 PyTorch >= 1.1.  
