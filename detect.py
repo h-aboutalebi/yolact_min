@@ -14,7 +14,7 @@ from data.config import update_config
 from utils.output_utils import NMS, after_nms, draw_img
 
 parser = argparse.ArgumentParser(description='YOLACT COCO Evaluation')
-parser.add_argument('--trained_model', default='weights/yolact_base_54_800000.pth', type=str)
+parser.add_argument('--trained_model', default='res50_coco_800000.pth', type=str)
 parser.add_argument('--traditional_nms', default=False, action='store_true', help='Whether to use traditional nms.')
 parser.add_argument('--hide_mask', default=False, action='store_true', help='Whether to display masks')
 parser.add_argument('--hide_bbox', default=False, action='store_true', help='Whether to display bboxes')
@@ -24,7 +24,7 @@ parser.add_argument('--show_lincomb', default=False, action='store_true',
                     help='Whether to show the generating process of masks.')
 parser.add_argument('--no_crop', default=False, action='store_true',
                     help='Do not crop output masks with the predicted bounding box.')
-parser.add_argument('--image', default=None, type=str, help='The folder of images for detecting.')
+parser.add_argument('--image', default="/home/hossein/pycharm_deployment/yolact_min/data/coco2017/val2017", type=str, help='The folder of images for detecting.')
 parser.add_argument('--video', default=None, type=str,
                     help='The path of the video to evaluate. Pass a number to use the related webcam.')
 parser.add_argument('--real_time', default=False, action='store_true', help='Show the detection results real-timely.')
