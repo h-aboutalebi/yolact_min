@@ -5,6 +5,11 @@ from data.config import cfg, mask_proto_net, extra_head_net
 from modules.backbone import construct_backbone
 from utils.box_utils import make_anchors
 from utils import timer
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms import Normalize, Resize, ToTensor
+import numpy as np
+import cv2
 
 
 class Concat(nn.Module):
@@ -22,15 +27,17 @@ class InterpolateModule(nn.Module):
     """
     A module version of F.interpolate.
     """
-
-    def __init__(self, *args, **kwdargs):
+    #changed
+    def __init__(self, scale_factor, mode, align_corners):
         super().__init__()
+        self.scale_factor=scale_factor
+        self.mode=mode
+        self.align_corners=align_corners
 
-        self.args = args
-        self.kwdargs = kwdargs
-
+    # changed
     def forward(self, x):
-        return F.interpolate(x, *self.args, **self.kwdargs)
+        #changed added align_corners=True
+        return F.interpolate(x, scale_factor=float(self.scale_factor),mode=self.mode,align_corners=True)
 
 
 def make_net(in_channels, cfg_net, include_last_relu=True):
@@ -53,7 +60,8 @@ def make_net(in_channels, cfg_net, include_last_relu=True):
 
             else:
                 if num_channels is None:
-                    layer = InterpolateModule(scale_factor=-kernel_size, mode='bilinear', align_corners=False,
+                    #changed align_corners=True
+                    layer = InterpolateModule(scale_factor=-kernel_size, mode='bilinear', align_corners=True,
                                               **layer_cfg[2])
                 else:
                     layer = nn.ConvTranspose2d(in_channels, num_channels, -kernel_size, **layer_cfg[2])
@@ -119,7 +127,9 @@ class FPN(nn.Module):
         # ModuleList((0): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
         #            (1): Conv2d(256, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1)))
 
-    def forward(self, backbone_outs):
+    def forward(self, x,y,z):
+        #changed
+        backbone_outs=[x,y,z]
         out = []
         x = torch.zeros(1, device=backbone_outs[0].device)
         for i in range(len(backbone_outs)):
@@ -134,7 +144,8 @@ class FPN(nn.Module):
 
             if j < len(backbone_outs) - 1:
                 _, _, h, w = backbone_outs[j].size()
-                x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
+                #changed align_corners
+                x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=True)
 
             x = x + lat_layer(backbone_outs[j])
 
@@ -234,40 +245,39 @@ class Yolact(nn.Module):
                 module.bias.requires_grad = False
 
     def forward(self, x):
-        with timer.env('backbone'):
-            outs = self.backbone(x)
+        # changed
+        outs = self.backbone(x)
 
-        with timer.env('fpn'):
-            outs = [outs[i] for i in cfg.backbone.selected_layers]
-            outs = self.fpn(outs)
+        #changed
+        outs = [outs[i] for i in [1,2,3]]
+        outs = self.fpn(outs[0],outs[1],outs[2])
 
-            '''
+        '''
             outs:
             (n, 3, 550, 550) -> backbone -> (n, 256, 138, 138) -> fpn -> (n, 256, 69, 69) P3
                                             (n, 512, 69, 69)             (n, 256, 35, 35) P4
                                             (n, 1024, 35, 35)            (n, 256, 18, 18) P5
                                             (n, 2048, 18, 18)            (n, 256, 9, 9)   P6
                                                                          (n, 256, 5, 5)   P7
-            '''
+        '''
         if isinstance(self.anchors, list):
+            #changed
             for i, shape in enumerate([list(aa.shape) for aa in outs]):
-                self.anchors += make_anchors(shape[2], shape[3], cfg.scales[i])
+                self.anchors += make_anchors(torch.tensor(shape[2]), torch.tensor(shape[3]), cfg.scales[i])
             self.anchors = torch.Tensor(self.anchors).view(-1, 4)
 
-        with timer.env('proto'):
             # outs[0]: [2, 256, 69, 69], the feature map from P3
-            proto_out = self.proto_net(outs[0])  # proto_out: (n, 32, 138, 138)
-            proto_out = F.relu(proto_out, inplace=True)
-            proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
+        proto_out = self.proto_net(outs[0])  # proto_out: (n, 32, 138, 138)
+        proto_out = F.relu(proto_out, inplace=True)
+        proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
-        with timer.env('pred_heads'):
-            predictions = {'box': [], 'class': [], 'coef': []}
+        predictions = {'box': [], 'class': [], 'coef': []}
 
-            for i in self.selected_layers:  # self.selected_layers [0, 1, 2, 3, 4]
-                p = self.prediction_layers[0](outs[i])
+        for i in self.selected_layers:  # self.selected_layers [0, 1, 2, 3, 4]
+            p = self.prediction_layers[0](outs[i])
 
-                for k, v in p.items():
-                    predictions[k].append(v)
+            for k, v in p.items():
+                predictions[k].append(v)
 
         for k, v in predictions.items():
             predictions[k] = torch.cat(v, -2)
@@ -283,3 +293,27 @@ class Yolact(nn.Module):
         else:
             predictions['class'] = F.softmax(predictions['class'], -1)
             return predictions
+
+    #changed
+    def preprocess(self,image,img_path,image_size=550):
+        MEANS = (103.94, 116.78, 123.68)
+        STD=(57.38, 57.12, 58.40)
+        channel_map=[2,1,0]
+        image=image.astype(np.float32)
+        composed = transforms.Compose([Resize(size=(image_size,image_size)),
+                                       ToTensor()])
+        image = cv2.resize(image, (image_size, image_size))
+        im_h, im_w, depth = image.shape
+
+        expand_image = np.zeros((image_size, image_size, depth), dtype=image.dtype)
+        expand_image[:, :, :] = MEANS
+        expand_image[:im_h, :im_w] = image
+        image=expand_image
+        image = image.astype(np.float32)
+        image = (image - np.array(MEANS, dtype=np.float32)) / np.array(STD, dtype=np.float32)
+        image=image[:, :, channel_map]
+        image = image.astype(np.float32)
+        image=torch.from_numpy(image).permute(2, 0, 1)
+        batch = image.unsqueeze(0)
+        return batch.cuda()
+

@@ -1,11 +1,18 @@
 #!/usr/bin/env python 
 # -*- coding:utf-8 -*-
 import torch
+import os
+import glob
 import torch.backends.cudnn as cudnn
 import argparse
 import glob
 import cv2
 import time
+import numpy as np
+import onnx
+import tensorflow as tf
+from onnx_tf.backend import prepare
+
 
 from modules.build_yolact import Yolact
 from utils.augmentations import FastBaseTransform
@@ -13,8 +20,11 @@ from utils.functions import MovingAverage, ProgressBar
 from data.config import update_config
 from utils.output_utils import NMS, after_nms, draw_img
 
+
 parser = argparse.ArgumentParser(description='YOLACT COCO Evaluation')
-parser.add_argument('--trained_model', default='weights/yolact_base_54_800000.pth', type=str)
+parser.add_argument('--output_path', default="results/images", type=str,
+                    help='The path of directory to save image results')
+parser.add_argument('--trained_model', default='res50_coco_800000.pth', type=str)
 parser.add_argument('--traditional_nms', default=False, action='store_true', help='Whether to use traditional nms.')
 parser.add_argument('--hide_mask', default=False, action='store_true', help='Whether to display masks')
 parser.add_argument('--hide_bbox', default=False, action='store_true', help='Whether to display bboxes')
@@ -24,7 +34,7 @@ parser.add_argument('--show_lincomb', default=False, action='store_true',
                     help='Whether to show the generating process of masks.')
 parser.add_argument('--no_crop', default=False, action='store_true',
                     help='Do not crop output masks with the predicted bounding box.')
-parser.add_argument('--image', default=None, type=str, help='The folder of images for detecting.')
+parser.add_argument('--image', default="/home/hossein/pycharm_deployment/yolact_min/data/coco2017/val2017", type=str, help='The folder of images for detecting.')
 parser.add_argument('--video', default=None, type=str,
                     help='The path of the video to evaluate. Pass a number to use the related webcam.')
 parser.add_argument('--real_time', default=False, action='store_true', help='Show the detection results real-timely.')
@@ -35,8 +45,16 @@ args = parser.parse_args()
 strs = args.trained_model.split('_')
 config = f'{strs[-3]}_{strs[-2]}_config'
 
+#delete content of result folder first
+files = glob.glob(args.output_path + '/*')
+for f in files:
+    os.remove(f)
+
 update_config(config)
 print(f'\nUsing \'{config}\' according to the trained_model.\n')
+# conversion of onnx to .pb:
+onnx_model = onnx.load("/home/hossein/pycharm_deployment/yolact_min/yolact.onnx")
+tf_rep = prepare(onnx_model)
 
 with torch.no_grad():
     cuda = torch.cuda.is_available()
@@ -67,7 +85,7 @@ with torch.no_grad():
                 img_tensor = img_tensor.cuda()
             img_h, img_w = img_tensor.shape[0], img_tensor.shape[1]
             img_trans = FastBaseTransform()(img_tensor.unsqueeze(0))
-
+            tensor_outs=tf_rep.run(img_trans.cpu().numpy())._0
             net_outs = net(img_trans)
             nms_outs = NMS(net_outs, args.traditional_nms)
 
