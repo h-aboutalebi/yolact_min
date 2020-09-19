@@ -36,7 +36,8 @@ class InterpolateModule(nn.Module):
 
     # changed
     def forward(self, x):
-        return F.interpolate(x, scale_factor=float(self.scale_factor),mode=self.mode,align_corners=self.align_corners)
+        #changed added align_corners=True
+        return F.interpolate(x, scale_factor=float(self.scale_factor),mode=self.mode,align_corners=True)
 
 
 def make_net(in_channels, cfg_net, include_last_relu=True):
@@ -59,7 +60,8 @@ def make_net(in_channels, cfg_net, include_last_relu=True):
 
             else:
                 if num_channels is None:
-                    layer = InterpolateModule(scale_factor=-kernel_size, mode='bilinear', align_corners=False,
+                    #changed align_corners=True
+                    layer = InterpolateModule(scale_factor=-kernel_size, mode='bilinear', align_corners=True,
                                               **layer_cfg[2])
                 else:
                     layer = nn.ConvTranspose2d(in_channels, num_channels, -kernel_size, **layer_cfg[2])
@@ -142,7 +144,8 @@ class FPN(nn.Module):
 
             if j < len(backbone_outs) - 1:
                 _, _, h, w = backbone_outs[j].size()
-                x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=False)
+                #changed align_corners
+                x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=True)
 
             x = x + lat_layer(backbone_outs[j])
 
